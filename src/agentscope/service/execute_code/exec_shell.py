@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Service to execute shell commands."""
 import subprocess
+import re
 
 from loguru import logger
 
@@ -43,6 +44,11 @@ def execute_shell_command(command: str) -> ServiceResponse:
         )
 
     try:
+        if not re.match(r"^[a-zA-Z0-9_\-./\\]+$", command):
+            return ServiceResponse(
+                status=ServiceExecStatus.ERROR,
+                content="Invalid command format: only alphanumeric characters, underscore, dash, dot, forward slash and backslash are allowed.",
+            )
         result = subprocess.run(
             command,
             shell=True,
