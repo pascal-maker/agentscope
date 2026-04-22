@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """The utility functions for AgentScope Studio."""
 import os.path
+import re
 import sqlite3
 
 
@@ -15,6 +16,10 @@ def _check_and_convert_id_type(db_path: str, table_name: str) -> None:
 
     if not os.path.exists(db_path):
         return
+
+    # Validate table_name to prevent SQL injection
+    if not re.match(r'^[a-zA-Z0-9_]+$', str(table_name)):
+        raise ValueError("Invalid input")
 
     # Connect to the SQLite database
     conn = sqlite3.connect(db_path)
