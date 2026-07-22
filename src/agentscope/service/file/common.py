@@ -7,6 +7,7 @@ from typing import List
 
 from agentscope.service.service_response import ServiceResponse
 from agentscope.service.service_status import ServiceExecStatus
+from agentscope.utils.common import _resolve_safe_path
 
 
 def create_file(file_path: str, content: str = "") -> ServiceResponse:
@@ -24,12 +25,13 @@ def create_file(file_path: str, content: str = "") -> ServiceResponse:
         str contains an error message if any, including the error type.
 
     """
-    if os.path.exists(file_path):
-        return ServiceResponse(
-            status=ServiceExecStatus.ERROR,
-            content="FileExistsError: The file already exists.",
-        )
     try:
+        file_path = _resolve_safe_path(file_path, for_write=True)
+        if os.path.exists(file_path):
+            return ServiceResponse(
+                status=ServiceExecStatus.ERROR,
+                content="FileExistsError: The file already exists.",
+            )
         with open(file_path, "w", encoding="utf-8") as file:
             file.write(content)
         return ServiceResponse(
@@ -57,6 +59,7 @@ def delete_file(file_path: str) -> ServiceResponse:
 
     """
     try:
+        file_path = _resolve_safe_path(file_path)
         os.remove(file_path)
         return ServiceResponse(
             status=ServiceExecStatus.SUCCESS,
@@ -85,17 +88,20 @@ def move_file(source_path: str, destination_path: str) -> ServiceResponse:
         str contains an error message if any, including the error type.
 
     """
-    if not os.path.exists(source_path):
-        return ServiceResponse(
-            status=ServiceExecStatus.ERROR,
-            content="FileNotFoundError: The source file does not exist.",
-        )
-    if os.path.exists(destination_path):
-        return ServiceResponse(
-            status=ServiceExecStatus.ERROR,
-            content="FileExistsError: The destination file already exists.",
-        )
     try:
+        source_path = _resolve_safe_path(source_path)
+        destination_path = _resolve_safe_path(destination_path, for_write=True)
+        if not os.path.exists(source_path):
+            return ServiceResponse(
+                status=ServiceExecStatus.ERROR,
+                content="FileNotFoundError: The source file does not exist.",
+            )
+        if os.path.exists(destination_path):
+            return ServiceResponse(
+                status=ServiceExecStatus.ERROR,
+                content="FileExistsError: The destination file already "
+                "exists.",
+            )
         shutil.move(source_path, destination_path)
         return ServiceResponse(
             status=ServiceExecStatus.SUCCESS,
@@ -122,12 +128,13 @@ def create_directory(directory_path: str) -> ServiceResponse:
         str contains an error message if any, including the error type.
 
     """
-    if os.path.exists(directory_path):
-        return ServiceResponse(
-            status=ServiceExecStatus.ERROR,
-            content="FileExistsError: The directory already exists.",
-        )
     try:
+        directory_path = _resolve_safe_path(directory_path, for_write=True)
+        if os.path.exists(directory_path):
+            return ServiceResponse(
+                status=ServiceExecStatus.ERROR,
+                content="FileExistsError: The directory already exists.",
+            )
         os.makedirs(directory_path)
         return ServiceResponse(
             status=ServiceExecStatus.SUCCESS,
@@ -154,12 +161,13 @@ def delete_directory(directory_path: str) -> ServiceResponse:
         str contains an error message if any, including the error type.
 
     """
-    if not os.path.exists(directory_path):
-        return ServiceResponse(
-            status=ServiceExecStatus.ERROR,
-            content="FileExistsError: The directory does not exists.",
-        )
     try:
+        directory_path = _resolve_safe_path(directory_path)
+        if not os.path.exists(directory_path):
+            return ServiceResponse(
+                status=ServiceExecStatus.ERROR,
+                content="FileExistsError: The directory does not exists.",
+            )
         shutil.rmtree(directory_path)
         return ServiceResponse(
             status=ServiceExecStatus.SUCCESS,
@@ -191,18 +199,21 @@ def move_directory(
         str contains an error message if any, including the error type.
 
     """
-    if not os.path.exists(source_path):
-        return ServiceResponse(
-            status=ServiceExecStatus.ERROR,
-            content="FileNotFoundError: The source directory does not exist.",
-        )
-    if os.path.exists(destination_path):
-        return ServiceResponse(
-            status=ServiceExecStatus.ERROR,
-            content="FileExistsError: The destination directory already "
-            "exists.",
-        )
     try:
+        source_path = _resolve_safe_path(source_path)
+        destination_path = _resolve_safe_path(destination_path, for_write=True)
+        if not os.path.exists(source_path):
+            return ServiceResponse(
+                status=ServiceExecStatus.ERROR,
+                content="FileNotFoundError: The source directory does not "
+                "exist.",
+            )
+        if os.path.exists(destination_path):
+            return ServiceResponse(
+                status=ServiceExecStatus.ERROR,
+                content="FileExistsError: The destination directory already "
+                "exists.",
+            )
         shutil.move(source_path, destination_path)
         return ServiceResponse(
             status=ServiceExecStatus.SUCCESS,
@@ -228,17 +239,18 @@ def list_directory_content(directory_path: str) -> ServiceResponse:
         `ServiceResponse`: The results contain a list of direcotry contents,
         or an error message if any, including the error type.
     """
-    if not os.path.exists(directory_path):
-        return ServiceResponse(
-            status=ServiceExecStatus.ERROR,
-            content="FileNotFoundError: The directory does not exist.",
-        )
-    if not os.path.isdir(directory_path):
-        return ServiceResponse(
-            status=ServiceExecStatus.ERROR,
-            content="FileNotFoundError: The path is not a directory",
-        )
     try:
+        directory_path = _resolve_safe_path(directory_path)
+        if not os.path.exists(directory_path):
+            return ServiceResponse(
+                status=ServiceExecStatus.ERROR,
+                content="FileNotFoundError: The directory does not exist.",
+            )
+        if not os.path.isdir(directory_path):
+            return ServiceResponse(
+                status=ServiceExecStatus.ERROR,
+                content="FileNotFoundError: The path is not a directory",
+            )
         ls_result: List[str] = os.listdir(directory_path)
         return ServiceResponse(
             status=ServiceExecStatus.SUCCESS,

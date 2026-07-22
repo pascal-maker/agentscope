@@ -18,7 +18,7 @@ from ..service_response import (
     ServiceResponse,
     ServiceExecStatus,
 )
-from ...utils.common import _download_file
+from ...utils.common import _download_file, _resolve_safe_path
 
 
 def dashscope_text_to_image(
@@ -83,6 +83,7 @@ def dashscope_text_to_image(
         # save images to save_dir
         if urls is not None:
             if save_dir:
+                save_dir = _resolve_safe_path(save_dir, for_write=True)
                 os.makedirs(save_dir, exist_ok=True)
                 urls_local = []
                 # Obtain the image file names in the url
@@ -166,8 +167,9 @@ def dashscope_image_to_text(
     img_abs_urls = []
     for url in image_urls:
         if os.path.exists(url):
+            url = _resolve_safe_path(url)
             if os.path.isfile(url):
-                img_abs_urls.append(os.path.abspath(url))
+                img_abs_urls.append(url)
             else:
                 return ServiceResponse(
                     ServiceExecStatus.ERROR,
@@ -274,11 +276,15 @@ def dashscope_text_to_audio(
 
     if audio_data is not None:
         if save_dir is not None:
+            save_dir = _resolve_safe_path(save_dir, for_write=True)
             os.makedirs(save_dir, exist_ok=True)
 
         # Save locally
         text = text[0:15] if len(text) > 15 else text
-        audio_path = os.path.join(save_dir, f"{text.strip()}.wav")
+        audio_path = _resolve_safe_path(
+            os.path.join(save_dir, f"{text.strip()}.wav"),
+            for_write=True,
+        )
 
         with open(audio_path, "wb") as f:
             f.write(audio_data)

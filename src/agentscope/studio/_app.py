@@ -41,6 +41,7 @@ from ..utils.common import (
     _is_process_alive,
     _is_windows,
     _generate_new_runtime_id,
+    _resolve_safe_path,
 )
 from ..rpc.rpc_client import RpcClient
 
@@ -65,6 +66,37 @@ _socketio = SocketIO(_app)
 CORS(_app)
 
 _RUNS_DIRS = []
+
+
+def _studio_allowed_roots() -> list[str]:
+    """Return root directories that Studio may read or write."""
+    roots = [str(_cache_dir)]
+    if _RUNS_DIRS is not None:
+        roots.extend(_RUNS_DIRS)
+    return roots
+
+
+def _resolve_studio_path(path: str, for_write: bool = False) -> str:
+    """Resolve a Studio path under configured run dirs or Studio cache."""
+    return _resolve_safe_path(
+        path,
+        allowed_roots=_studio_allowed_roots(),
+        for_write=for_write,
+    )
+
+
+def _workflow_path(
+    user_dir: str, filename: str, for_write: bool = False
+) -> str:
+    """Build a safe workflow path inside a user's Studio cache directory."""
+    filename = os.path.basename(filename)
+    if not filename.endswith(".json"):
+        filename = f"{filename}.json"
+    return _resolve_safe_path(
+        os.path.join(user_dir, filename),
+        allowed_roots=[user_dir],
+        for_write=for_write,
+    )
 
 
 class _UserInputRequestQueue:
@@ -164,9 +196,15 @@ def _get_all_runs_from_dir() -> dict:
     runtime_configs_from_dir = {}
     if _RUNS_DIRS is not None:
         for runs_dir in set(_RUNS_DIRS):
+            runs_dir = _resolve_studio_path(runs_dir)
+            if not os.path.isdir(runs_dir):
+                continue
             for runtime_dir in os.listdir(runs_dir):
                 path_runtime = os.path.join(runs_dir, runtime_dir)
-                path_config = os.path.join(path_runtime, ".config")
+                path_config = _resolve_safe_path(
+                    os.path.join(path_runtime, ".config"),
+                    allowed_roots=[runs_dir],
+                )
                 if os.path.exists(path_config):
                     with open(path_config, "r", encoding="utf-8") as file:
                         runtime_config = json.load(file)
@@ -483,8 +521,19 @@ def _get_messages(run_id: str) -> Response:
             run_dir = runtime_configs_from_dir[run_id]["run_dir"]
 
     # Load the messages from the local file
-    path_messages = os.path.join(run_dir, "logging.chat")
-    if run_dir is None or not os.path.exists(path_messages):
+    if run_dir is None:
+        return jsonify([])
+
+    try:
+        run_dir = _resolve_studio_path(run_dir)
+        path_messages = _resolve_safe_path(
+            os.path.join(run_dir, "logging.chat"),
+            allowed_roots=[run_dir],
+        )
+    except ValueError:
+        abort(400, "Invalid run directory")
+
+    if not os.path.exists(path_messages):
         return jsonify([])
     else:
         with open(path_messages, "r", encoding="utf-8") as file:
@@ -557,13 +606,27 @@ def _get_all_runs() -> Response:
 def _get_invocations() -> Response:
     """Get all API invocations in a run instance."""
     run_dir = request.args.get("run_dir")
-    path_invocations = os.path.join(run_dir, _DEFAULT_SUBDIR_INVOKE)
+    if run_dir is None:
+        abort(400, "Missing run directory")
+
+    try:
+        run_dir = _resolve_studio_path(run_dir)
+        path_invocations = _resolve_safe_path(
+            os.path.join(run_dir, _DEFAULT_SUBDIR_INVOKE),
+            allowed_roots=[run_dir],
+        )
+    except ValueError:
+        abort(400, "Invalid run directory")
 
     invocations = []
     if os.path.exists(path_invocations):
         for filename in os.listdir(path_invocations):
-            with open(
+            path_invocation = _resolve_safe_path(
                 os.path.join(path_invocations, filename),
+                allowed_roots=[path_invocations],
+            )
+            with open(
+                path_invocation,
                 "r",
                 encoding="utf-8",
             ) as file:
@@ -575,14 +638,27 @@ def _get_invocations() -> Response:
 def _get_code() -> Response:
     """Get the python code from the run directory."""
     run_dir = request.args.get("run_dir")
+    if run_dir is None:
+        abort(400, "Missing run directory")
 
-    dir_code = os.path.join(run_dir, _DEFAULT_SUBDIR_CODE)
+    try:
+        run_dir = _resolve_studio_path(run_dir)
+        dir_code = _resolve_safe_path(
+            os.path.join(run_dir, _DEFAULT_SUBDIR_CODE),
+            allowed_roots=[run_dir],
+        )
+    except ValueError:
+        abort(400, "Invalid run directory")
 
     codes = {}
     if os.path.exists(dir_code):
         for filename in os.listdir(dir_code):
-            with open(
+            path_code = _resolve_safe_path(
                 os.path.join(dir_code, filename),
+                allowed_roots=[dir_code],
+            )
+            with open(
+                path_code,
                 "r",
                 encoding="utf-8",
             ) as file:
@@ -597,8 +673,11 @@ def _get_file() -> Any:
 
     if file_path is not None:
         try:
+            file_path = _resolve_studio_path(file_path)
             file = send_file(file_path)
             return file
+        except ValueError:
+            return jsonify({"error": "Invalid file path."})
         except FileNotFoundError:
             return jsonify({"error": "File not found."})
     return jsonify({"error": "File not found."})
@@ -661,27 +740,27 @@ def _read_examples() -> Response:
     """
     lang = request.json.get("lang")
     file_index = request.json.get("data")
+    lang = lang if lang in {"en", "zh"} else "en"
+    file_index = str(file_index)
+    file_index = file_index if file_index in {"1", "2", "3", "4"} else "1"
+    template_dir = os.path.join(
+        _app.root_path,
+        "static",
+        "workstation_templates",
+    )
+    template_path = _resolve_safe_path(
+        os.path.join(template_dir, f"{lang}{file_index}.json"),
+        allowed_roots=[template_dir],
+    )
 
-    if not os.path.exists(
-        os.path.join(
-            _app.root_path,
-            "static",
-            "workstation_templates",
-            f"{lang}{file_index}.json",
-        ),
-    ):
+    if not os.path.exists(template_path):
         lang = "en"
+        template_path = _resolve_safe_path(
+            os.path.join(template_dir, f"{lang}{file_index}.json"),
+            allowed_roots=[template_dir],
+        )
 
-    with open(
-        os.path.join(
-            _app.root_path,
-            "static",
-            "workstation_templates",
-            f"{lang}{file_index}.json",
-        ),
-        "r",
-        encoding="utf-8",
-    ) as jf:
+    with open(template_path, "r", encoding="utf-8") as jf:
         data = json.load(jf)
     return jsonify(json=data)
 
@@ -703,7 +782,10 @@ def _save_workflow() -> Response:
     if not filename:
         return jsonify({"message": "Filename is required"})
 
-    filepath = os.path.join(user_dir, f"{filename}.json")
+    try:
+        filepath = _workflow_path(user_dir, filename, for_write=True)
+    except ValueError:
+        return jsonify({"message": "Invalid filename"})
 
     try:
         workflow = json.loads(workflow_str)
@@ -767,9 +849,10 @@ def _delete_workflow() -> Response:
     if not filename.endswith(".json"):
         return jsonify({"error": "Only JSON files can be deleted"})
 
-    filename = os.path.basename(filename)
-
-    filepath = os.path.join(user_dir, filename)
+    try:
+        filepath = _workflow_path(user_dir, filename)
+    except ValueError:
+        return jsonify({"error": "Invalid filename"})
     if not os.path.exists(filepath):
         return jsonify({"error": "File not found"})
 
@@ -809,7 +892,13 @@ def _load_workflow() -> Response:
     if not filename:
         return jsonify({"error": "Filename is required"}), 400
 
-    filepath = os.path.join(user_dir, filename)
+    if not filename.endswith(".json"):
+        return jsonify({"error": "Only JSON files can be loaded"}), 400
+
+    try:
+        filepath = _workflow_path(user_dir, filename)
+    except ValueError:
+        return jsonify({"error": "Invalid filename"}), 400
     if not os.path.exists(filepath):
         return jsonify({"error": "File not found"}), 404
 

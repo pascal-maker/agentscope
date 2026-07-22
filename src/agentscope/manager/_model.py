@@ -6,6 +6,7 @@ from typing import Any, Union, Sequence
 from loguru import logger
 
 from ..models import ModelWrapperBase, _get_model_wrapper
+from ..utils.common import _resolve_safe_path
 
 
 class ModelManager:
@@ -80,6 +81,7 @@ class ModelManager:
         cfgs = None
 
         if isinstance(model_configs, str):
+            model_configs = _resolve_safe_path(model_configs)
             with open(model_configs, "r", encoding="utf-8") as f:
                 cfgs = json.load(f)
 
