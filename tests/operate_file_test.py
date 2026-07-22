@@ -19,6 +19,7 @@ from agentscope.service import (
     get_current_directory,
 )
 from agentscope.service.service_status import ServiceExecStatus
+from agentscope.utils.common import _resolve_safe_path
 
 
 class OperateFileTest(unittest.TestCase):
@@ -102,6 +103,15 @@ class OperateFileTest(unittest.TestCase):
 
         info = read_json_file(self.json_file_name).content
         self.assertEqual(info, f"{data}")
+
+    def test_rejects_paths_outside_allowed_roots(self) -> None:
+        """Reject local file access outside configured safe roots."""
+        with self.assertRaises(ValueError):
+            _resolve_safe_path("/etc/passwd")
+
+        response = read_text_file("/etc/passwd")
+        self.assertEqual(response.status, ServiceExecStatus.ERROR)
+        self.assertIn("outside the allowed file roots", response.content)
 
 
 if __name__ == "__main__":

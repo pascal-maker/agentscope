@@ -37,6 +37,7 @@ from agentscope.rpc import AsyncResult
 from agentscope.rpc.rpc_agent_pb2_grpc import RpcAgentServicer
 from agentscope.server.async_result_pool import get_pool
 from agentscope.serialize import serialize
+from agentscope.utils.common import _resolve_safe_path
 
 
 def _register_server_to_studio(
@@ -445,7 +446,7 @@ class AgentServerServicer(RpcAgentServicer):
         context: ServicerContext,
     ) -> Any:
         """Download file from local path."""
-        filepath = request.value
+        filepath = _resolve_safe_path(request.value)
         if not os.path.exists(filepath):
             context.abort(
                 grpc.StatusCode.NOT_FOUND,

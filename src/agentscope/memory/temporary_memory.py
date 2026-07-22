@@ -15,6 +15,7 @@ from loguru import logger
 from .memory import MemoryBase
 from ..manager import ModelManager
 from ..serialize import serialize, deserialize
+from ..utils.common import _resolve_safe_path
 from ..service.retrieval.retrieval_from_list import retrieve_from_list
 from ..service.retrieval.similarity import Embedding
 from ..message import Msg
@@ -157,6 +158,7 @@ class TemporaryMemory(MemoryBase):
             return self._content
 
         if to_mem is False and file_path is not None:
+            file_path = _resolve_safe_path(file_path, for_write=True)
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(serialize(self._content))
         else:
@@ -186,8 +188,19 @@ class TemporaryMemory(MemoryBase):
                 if False, memories will be appended to the old one at the end.
         """
         if isinstance(memories, str):
-            if os.path.isfile(memories):
-                with open(memories, "r", encoding="utf-8") as f:
+            try:
+                memory_file_path = _resolve_safe_path(memories)
+            except ValueError:
+                if os.path.sep in memories or (
+                    os.path.altsep is not None and os.path.altsep in memories
+                ):
+                    raise
+                memory_file_path = None
+
+            if memory_file_path is not None and os.path.isfile(
+                memory_file_path
+            ):
+                with open(memory_file_path, "r", encoding="utf-8") as f:
                     load_memories = deserialize(f.read())
             else:
                 try:

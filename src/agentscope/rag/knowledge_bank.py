@@ -8,6 +8,7 @@ from typing import Optional, Union
 from loguru import logger
 from agentscope.agents import AgentBase
 from ..manager import ModelManager
+from ..utils.common import _resolve_safe_path
 from .knowledge import Knowledge
 
 DEFAULT_INDEX_CONFIG = {
@@ -46,6 +47,7 @@ class KnowledgeBank:
 
         if isinstance(configs, str):
             logger.info(f"Loading configs from {configs}")
+            configs = _resolve_safe_path(configs)
             with open(configs, "r", encoding="utf-8") as fp:
                 self.configs = json.loads(fp.read())
         else:

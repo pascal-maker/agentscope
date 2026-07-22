@@ -21,7 +21,7 @@ from ...models.openai_model import (
     OpenAIDALLEWrapper,
     OpenAIChatWrapper,
 )
-from ...utils.common import _download_file
+from ...utils.common import _download_file, _resolve_safe_path
 from ...message import Msg
 
 
@@ -61,6 +61,7 @@ def _handle_openai_img_response(
     images = raw_response["data"]
     urls = [_["url"] for _ in images]
     if save_dir is not None:
+        save_dir = _resolve_safe_path(save_dir, for_write=True)
         os.makedirs(save_dir, exist_ok=True)
         urls_local = []
         for url in urls:
@@ -88,7 +89,8 @@ def _parse_url(url: str) -> BytesIO:
     else:
         if not os.path.exists(url):
             raise FileNotFoundError(f"File not found: {url}")
-        with open(os.path.abspath(url), "rb") as file:
+        file_path = _resolve_safe_path(url)
+        with open(file_path, "rb") as file:
             return BytesIO(file.read())
 
 
@@ -183,6 +185,7 @@ def openai_text_to_image(
             if not os.path.isabs(save_dir):
                 cwd = os.getcwd()
                 save_dir = os.path.join(cwd, save_dir)
+            save_dir = _resolve_safe_path(save_dir, for_write=True)
             os.makedirs(save_dir, exist_ok=True)
             urls_local = []
             for url in urls:
@@ -533,6 +536,7 @@ def openai_text_to_audio(
         cwd = os.getcwd()
         save_dir = os.path.join(cwd, save_dir)
         save_path = os.path.join(save_dir, f"{save_name}.{res_format}")
+    save_path = _resolve_safe_path(save_path, for_write=True)
     try:
         response = client.audio.speech.create(
             model=model,
@@ -608,7 +612,7 @@ def openai_audio_to_text(
         ) from e
 
     client = openai.OpenAI(api_key=api_key)
-    audio_file_url = os.path.abspath(audio_file_url)
+    audio_file_url = _resolve_safe_path(audio_file_url)
     with open(audio_file_url, "rb") as audio_file:
         try:
             transcription = client.audio.transcriptions.create(

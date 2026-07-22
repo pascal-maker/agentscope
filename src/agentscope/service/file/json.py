@@ -6,6 +6,7 @@ from typing import Any
 
 from agentscope.service.service_response import ServiceResponse
 from agentscope.service.service_status import ServiceExecStatus
+from agentscope.utils.common import _resolve_safe_path
 
 
 def read_json_file(file_path: str) -> ServiceResponse:
@@ -22,6 +23,7 @@ def read_json_file(file_path: str) -> ServiceResponse:
         an error message if any, including the error type.
     """
     try:
+        file_path = _resolve_safe_path(file_path)
         with open(file_path, "r", encoding="utf-8") as file:
             return ServiceResponse(
                 status=ServiceExecStatus.SUCCESS,
@@ -55,6 +57,14 @@ def write_json_file(
         `ServiceResponse`: where the boolean indicates success, and the
         str contains an error message if any, including the error type.
     """
+    try:
+        file_path = _resolve_safe_path(file_path, for_write=True)
+    except Exception as e:
+        return ServiceResponse(
+            status=ServiceExecStatus.ERROR,
+            content=f"{e.__class__.__name__}: {e}",
+        )
+
     if not overwrite and os.path.exists(file_path):
         return ServiceResponse(
             status=ServiceExecStatus.ERROR,

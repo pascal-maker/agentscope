@@ -91,6 +91,67 @@ def _chdir(path: str) -> Generator:
         os.chdir(cwd)
 
 
+def _get_allowed_file_roots(
+    allowed_roots: Optional[list[str]] = None,
+) -> list[str]:
+    """Get normalized root directories for local file access."""
+    roots = allowed_roots
+    if roots is None:
+        configured_roots = os.environ.get("AGENTSCOPE_ALLOWED_FILE_ROOTS")
+        if configured_roots:
+            roots = configured_roots.split(os.pathsep)
+        else:
+            roots = [
+                os.getcwd(),
+                tempfile.gettempdir(),
+                os.path.join(
+                    os.environ.get(
+                        "AS_HOME_PATH", str(os.path.expanduser("~"))
+                    ),
+                    ".cache",
+                    "agentscope",
+                ),
+            ]
+
+    return [
+        os.path.realpath(os.path.abspath(os.path.expanduser(root)))
+        for root in roots
+        if root
+    ]
+
+
+def _is_path_under_root(path: str, root: str) -> bool:
+    """Check whether a normalized path is inside a normalized root."""
+    try:
+        return os.path.commonpath([path, root]) == root
+    except ValueError:
+        return False
+
+
+def _resolve_safe_path(
+    file_path: str,
+    allowed_roots: Optional[list[str]] = None,
+    for_write: bool = False,
+) -> str:
+    """Resolve a local path and require it to stay under allowed roots."""
+    path = os.path.abspath(os.path.expanduser(file_path))
+    if for_write:
+        check_path = path if os.path.exists(path) else os.path.dirname(path)
+    else:
+        check_path = path
+    resolved_check_path = os.path.realpath(check_path)
+
+    roots = _get_allowed_file_roots(allowed_roots)
+    if not any(
+        _is_path_under_root(resolved_check_path, root) for root in roots
+    ):
+        raise ValueError(
+            f"Path [{file_path}] is outside the allowed file roots.",
+        )
+
+    return os.path.realpath(path)
+
+
 def _requests_get(
     url: str,
     params: dict,
@@ -302,7 +363,8 @@ def _to_openai_image_url(url: str) -> str:
     # Check if it is a local file
     elif os.path.exists(url) and os.path.isfile(url):
         if any(lower_url.endswith(_) for _ in support_image_extensions):
-            with open(url, "rb") as image_file:
+            image_path = _resolve_safe_path(url)
+            with open(image_path, "rb") as image_file:
                 base64_image = base64.b64encode(image_file.read()).decode(
                     "utf-8",
                 )
@@ -324,6 +386,7 @@ def _download_file(url: str, path_file: str, max_retries: int = 3) -> bool:
         max_retries (`int`, defaults to `3`)
             The maximum number of retries when fail to download the file.
     """
+    path_file = _resolve_safe_path(path_file, for_write=True)
     for n_retry in range(1, max_retries + 1):
         response = requests.get(url, stream=True)
         if response.status_code == requests.codes.ok:
